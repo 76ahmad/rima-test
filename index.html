@@ -790,3 +790,663 @@
             saveDataToStorage();
             showNotification(`تم حذف الطالب "${student.name}" بنجاح! 🗑️`);
         }
+
+        // تعديل معلومات طالب
+        function editStudent(studentId) {
+            const student = students.find(s => s.id === studentId);
+            if (!student) return;
+
+            const newName = prompt('تعديل اسم الطالب:', student.name);
+            if (!newName || newName.trim() === '') return;
+
+            const newPhone = prompt('تعديل رقم الهاتف:', student.phone || '');
+
+            // التحقق من عدم تكرار الاسم الجديد
+            if (newName !== student.name && students.find(s => s.name === newName.trim())) {
+                showNotification('هذا الاسم موجود بالفعل', 'error');
+                return;
+            }
+
+            // تحديث الاسم في الجدول إذا تغير
+            if (newName !== student.name) {
+                times.forEach(time => {
+                    days.forEach(day => {
+                        schedule[time][day] = schedule[time][day].map(name => 
+                            name === student.name ? newName.trim() : name
+                        );
+                    });
+                });
+            }
+
+            // تحديث بيانات الطالب
+            student.name = newName.trim();
+            student.phone = newPhone.trim();
+
+            renderStudentsList();
+            renderSchedule();
+            saveDataToStorage();
+            showNotification(`تم تحديث بيانات الطالب بنجاح! ✅`);
+        }
+
+        // عرض قائمة الطلاب
+        function renderStudentsList() {
+            const studentsList = document.getElementById('studentsList');
+            const searchTerm = document.getElementById('studentSearchInput').value.toLowerCase();
+
+            const filteredStudents = students.filter(student => 
+                student.name.toLowerCase().includes(searchTerm) ||
+                (student.phone && student.phone.includes(searchTerm))
+            );
+
+            studentsList.innerHTML = '';
+
+            if (filteredStudents.length === 0) {
+                studentsList.innerHTML = `
+                    <div style="text-align: center; padding: 30px; color: var(--text-secondary);">
+                        ${students.length === 0 ? '📝 لا توجد طلاب مضافين بعد' : '🔍 لا توجد نتائج للبحث'}
+                    </div>
+                `;
+                return;
+            }
+
+            filteredStudents.forEach(student => {
+                // حساب عدد الحصص للطالب
+                let sessionCount = 0;
+                times.forEach(time => {
+                    days.forEach(day => {
+                        if (schedule[time][day].includes(student.name)) {
+                            sessionCount++;
+                        }
+                    });
+                });
+
+                const studentItem = document.createElement('div');
+                studentItem.className = 'student-item';
+                studentItem.innerHTML = `
+                    <div class="student-info">
+                        <div class="student-name">${student.name}</div>
+                        <div class="student-details">
+                            ${student.phone ? `📱 ${student.phone} • ` : ''}
+                            🏊‍♂️ ${sessionCount} حصة
+                        </div>
+                    </div>
+                    <div class="student-actions">
+                        <button class="btn btn-warning btn-small" onclick="editStudent(${student.id})">✏️</button>
+                        <button class="btn btn-danger btn-small" onclick="deleteStudent(${student.id})">🗑️</button>
+                    </div>
+                `;
+                studentsList.appendChild(studentItem);
+            });
+        }
+
+        // عرض الجدول
+        function renderSchedule() {
+            const tbody = document.getElementById('scheduleBody');
+            tbody.innerHTML = '';
+
+            times.forEach(time => {
+                const row = document.createElement('tr');
+                
+                // عمود الوقت
+                const timeCell = document.createElement('td');
+                timeCell.className = 'time-slot';
+                timeCell.textContent = time;
+                row.appendChild(timeCell);
+
+                // أعمدة الأيام
+                days.forEach(day => {
+                    const cell = document.createElement('td');
+                    cell.onclick = () => openStudentSelection(time, day);
+                    
+                    const participantsInSlot = schedule[time][day] || [];
+                    
+                    if (participantsInSlot.length > 0) {
+                        participantsInSlot.forEach(participantName => {
+                            const participantDiv = document.createElement('div');
+                            participantDiv.className = 'participant';
+                            participantDiv.textContent = participantName;
+                            
+                            // إضافة معلومات إضافية عند التمرير
+                            const student = students.find(s => s.name === participantName);
+                            if (student && student.phone) {
+                                participantDiv.title = `📱 ${student.phone}`;
+                            }
+                            
+                            cell.appendChild(participantDiv);
+                        });
+                    } else {
+                        cell.innerHTML = '<div class="empty-slot">اضغط لاختيار الطلاب</div>';
+                    }
+                    
+                    row.appendChild(cell);
+                });
+                
+                tbody.appendChild(row);
+            });
+        }
+
+        // فتح نافذة اختيار الطلاب
+        function openStudentSelection(time, day) {
+            currentTimeSlot = { time, day };
+            selectedStudents = [...(schedule[time][day] || [])];
+
+            document.getElementById('modalTitle').textContent = `اختيار الطلاب`;
+            document.getElementById('modalSubtitle').textContent = `${day} - ${time}`;
+            document.getElementById('modalStudentSearch').value = '';
+
+            renderStudentSelectionGrid();
+            document.getElementById('studentSelectionModal').style.display = 'block';
+        }
+
+        // عرض شبكة اختيار الطلاب
+        function renderStudentSelectionGrid() {
+            const grid = document.getElementById('studentSelectionGrid');
+            const searchTerm = document.getElementById('modalStudentSearch').value.toLowerCase();
+
+            const filteredStudents = students.filter(student => 
+                student.name.toLowerCase().includes(searchTerm)
+            );
+
+            grid.innerHTML = '';
+
+            if (filteredStudents.length === 0) {
+                grid.innerHTML = `
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--text-secondary);">
+                        ${students.length === 0 ? '📝 لا توجد طلاب مضافين بعد' : '🔍 لا توجد نتائج للبحث'}
+                    </div>
+                `;
+                return;
+            }
+
+            filteredStudents.forEach(student => {
+                const studentDiv = document.createElement('div');
+                studentDiv.className = 'selectable-student';
+                
+                if (selectedStudents.includes(student.name)) {
+                    studentDiv.classList.add('selected');
+                }
+
+                studentDiv.innerHTML = `
+                    <div style="font-weight: 600; margin-bottom: 5px;">${student.name}</div>
+                    ${student.phone ? `<div style="font-size: 12px; color: var(--text-secondary);">📱 ${student.phone}</div>` : ''}
+                `;
+
+                studentDiv.onclick = () => toggleStudentSelection(student.name, studentDiv);
+                grid.appendChild(studentDiv);
+            });
+        }
+
+        // تبديل اختيار الطالب
+        function toggleStudentSelection(studentName, element) {
+            if (selectedStudents.includes(studentName)) {
+                selectedStudents = selectedStudents.filter(name => name !== studentName);
+                element.classList.remove('selected');
+            } else {
+                selectedStudents.push(studentName);
+                element.classList.add('selected');
+            }
+        }
+
+        // حفظ الطلاب المختارين
+        function saveSelectedStudents() {
+            if (!currentTimeSlot) return;
+
+            schedule[currentTimeSlot.time][currentTimeSlot.day] = [...selectedStudents];
+            
+            renderSchedule();
+            updateStats();
+            saveDataToStorage();
+            closeStudentSelection();
+            
+            showNotification(`تم حفظ التحديد بنجاح! ✅`);
+        }
+
+        // مسح الحصة الزمنية
+        function clearTimeSlot() {
+            if (!currentTimeSlot) return;
+
+            if (confirm('هل أنت متأكد من حذف جميع الطلاب من هذه الحصة؟')) {
+                schedule[currentTimeSlot.time][currentTimeSlot.day] = [];
+                selectedStudents = [];
+                
+                renderSchedule();
+                updateStats();
+                saveDataToStorage();
+                closeStudentSelection();
+                
+                showNotification(`تم مسح الحصة بنجاح! 🗑️`);
+            }
+        }
+
+        // إغلاق نافذة اختيار الطلاب
+        function closeStudentSelection() {
+            document.getElementById('studentSelectionModal').style.display = 'none';
+            currentTimeSlot = null;
+            selectedStudents = [];
+        }
+
+        // تحديث الإحصائيات
+        function updateStats() {
+            let totalParticipants = 0;
+            let occupiedSlots = 0;
+            const totalSlots = times.length * days.length;
+
+            times.forEach(time => {
+                days.forEach(day => {
+                    const participants = schedule[time][day] || [];
+                    totalParticipants += participants.length;
+                    if (participants.length > 0) {
+                        occupiedSlots++;
+                    }
+                });
+            });
+
+            document.getElementById('totalStudents').textContent = students.length;
+            document.getElementById('totalParticipants').textContent = totalParticipants;
+            document.getElementById('occupancyRate').textContent = Math.round((occupiedSlots / totalSlots) * 100) + '%';
+        }
+
+        // إظهار الإشعارات
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.classList.add('show');
+
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+
+        // إدارة الأوقات
+        function openTimeManager() {
+            renderTimesList();
+            document.getElementById('timeManagerModal').style.display = 'block';
+        }
+
+        function closeTimeManager() {
+            document.getElementById('timeManagerModal').style.display = 'none';
+        }
+
+        function renderTimesList() {
+            const timesList = document.getElementById('timesList');
+            timesList.innerHTML = '';
+
+            times.forEach((time, index) => {
+                const timeItem = document.createElement('div');
+                timeItem.className = 'student-item';
+                timeItem.innerHTML = `
+                    <div class="student-info">
+                        <div class="student-name">${time}</div>
+                    </div>
+                    <div class="student-actions">
+                        <button class="btn btn-warning btn-small" onclick="editTime(${index})">✏️ تعديل</button>
+                        <button class="btn btn-danger btn-small" onclick="deleteTime(${index})">🗑️ حذف</button>
+                    </div>
+                `;
+                timesList.appendChild(timeItem);
+            });
+        }
+
+        function addNewTime() {
+            const newTimeInput = document.getElementById('newTimeInput');
+            const newTime = newTimeInput.value;
+
+            if (!newTime) {
+                showNotification('يرجى إدخال وقت صحيح', 'error');
+                return;
+            }
+
+            if (times.includes(newTime)) {
+                showNotification('هذا الوقت موجود بالفعل', 'error');
+                return;
+            }
+
+            times.push(newTime);
+            times.sort();
+            
+            // إضافة الوقت الجديد للجدول
+            schedule[newTime] = {};
+            days.forEach(day => {
+                schedule[newTime][day] = [];
+            });
+
+            newTimeInput.value = '';
+            renderTimesList();
+            renderSchedule();
+            updateStats();
+            saveDataToStorage();
+            showNotification(`تم إضافة الوقت ${newTime} بنجاح! ⏰`);
+        }
+
+        function editTime(index) {
+            const oldTime = times[index];
+            const newTime = prompt('أدخل الوقت الجديد:', oldTime);
+
+            if (!newTime || newTime === oldTime) return;
+
+            if (times.includes(newTime)) {
+                showNotification('هذا الوقت موجود بالفعل', 'error');
+                return;
+            }
+
+            times[index] = newTime;
+            times.sort();
+
+            const oldData = schedule[oldTime];
+            delete schedule[oldTime];
+            schedule[newTime] = oldData;
+
+            renderTimesList();
+            renderSchedule();
+            updateStats();
+            saveDataToStorage();
+            showNotification(`تم تحديث الوقت بنجاح! ⏰`);
+        }
+
+        function deleteTime(index) {
+            const timeToDelete = times[index];
+            
+            let hasParticipants = false;
+            days.forEach(day => {
+                if (schedule[timeToDelete][day].length > 0) {
+                    hasParticipants = true;
+                }
+            });
+
+            if (hasParticipants) {
+                if (!confirm(`هناك طلاب مسجلون في وقت ${timeToDelete}. هل تريد المتابعة؟`)) {
+                    return;
+                }
+            }
+
+            times.splice(index, 1);
+            delete schedule[timeToDelete];
+
+            renderTimesList();
+            renderSchedule();
+            updateStats();
+            saveDataToStorage();
+            showNotification(`تم حذف الوقت ${timeToDelete} بنجاح! 🗑️`);
+        }
+
+        function resetDefaultTimes() {
+            if (!confirm('هل أنت متأكد من إعادة تعيين جميع الأوقات؟')) return;
+
+            times = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'];
+            initializeSchedule();
+            renderTimesList();
+            renderSchedule();
+            updateStats();
+            saveDataToStorage();
+            showNotification('تم إعادة تعيين الأوقات بنجاح! 🔄');
+        }
+
+        // وظائف النسخ الاحتياطي
+        function saveBackup() {
+            const data = {
+                students: students,
+                schedule: schedule,
+                times: times,
+                version: '2.0',
+                exportedAt: new Date().toISOString()
+            };
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const fileName = `swimming_backup_${new Date().toISOString().split('T')[0]}.json`;
+            
+            link.href = url;
+            link.download = fileName;
+            link.click();
+            
+            URL.revokeObjectURL(url);
+            showNotification('تم تصدير النسخة الاحتياطية بنجاح! 💾');
+        }
+
+        function loadBackup() {
+            document.getElementById('backupFileInput').click();
+        }
+
+        function handleBackupFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    
+                    if (data.version && data.students && data.schedule) {
+                        if (confirm('هل أنت متأكد من استعادة هذه النسخة؟ سيتم استبدال جميع البيانات الحالية.')) {
+                            students = data.students;
+                            schedule = data.schedule;
+                            times = data.times || times;
+                            
+                            initializeSchedule();
+                            renderStudentsList();
+                            renderSchedule();
+                            updateStats();
+                            saveDataToStorage();
+                            
+                            showNotification('تم استعادة النسخة الاحتياطية بنجاح! 📤');
+                        }
+                    } else {
+                        showNotification('ملف النسخة الاحتياطية غير صالح!', 'error');
+                    }
+                } catch (error) {
+                    showNotification('خطأ في قراءة الملف!', 'error');
+                }
+            };
+            reader.readAsText(file);
+            
+            // إعادة تعيين input
+            event.target.value = '';
+        }
+
+        function clearAllData() {
+            if (!confirm('هل أنت متأكد من حذف جميع البيانات؟ هذا الإجراء لا يمكن التراجع عنه!')) return;
+            if (!confirm('تأكيد أخير: سيتم حذف جميع الطلاب والجداول نهائياً!')) return;
+
+            students = [];
+            schedule = {};
+            localStorage.removeItem('swimmingScheduleData');
+            
+            initializeSchedule();
+            renderStudentsList();
+            renderSchedule();
+            updateStats();
+            
+            showNotification('تم حذف جميع البيانات بنجاح! 🗑️');
+        }
+
+        // وظائف التصدير والطباعة
+        function generateRandomSchedule() {
+            if (students.length === 0) {
+                showNotification('يرجى إضافة طلاب أولاً!', 'error');
+                return;
+            }
+
+            if (!confirm('هل تريد إنشاء جدول تجريبي؟ سيتم استبدال الجدول الحالي.')) return;
+
+            clearSchedule();
+            
+            times.forEach(time => {
+                days.forEach(day => {
+                    if (Math.random() > 0.4) {
+                        const numParticipants = Math.floor(Math.random() * Math.min(4, students.length)) + 1;
+                        const shuffledStudents = [...students].sort(() => Math.random() - 0.5);
+                        
+                        for (let i = 0; i < numParticipants && i < shuffledStudents.length; i++) {
+                            schedule[time][day].push(shuffledStudents[i].name);
+                        }
+                    }
+                });
+            });
+            
+            renderSchedule();
+            updateStats();
+            saveDataToStorage();
+            showNotification('تم إنشاء الجدول التجريبي بنجاح! 🎲');
+        }
+
+        function clearSchedule() {
+            if (!confirm('هل أنت متأكد من مسح الجدول؟')) return;
+
+            times.forEach(time => {
+                days.forEach(day => {
+                    schedule[time][day] = [];
+                });
+            });
+            
+            renderSchedule();
+            updateStats();
+            saveDataToStorage();
+            showNotification('تم مسح الجدول بنجاح! 🗑️');
+        }
+
+        function exportSchedule() {
+            let htmlTable = `
+                <html dir="rtl">
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        h2 { text-align: center; color: #4facfe; margin-bottom: 30px; }
+                        table { border-collapse: collapse; width: 100%; }
+                        th, td { border: 1px solid #000; padding: 8px; text-align: center; }
+                        th { background-color: #4facfe; color: white; font-weight: bold; }
+                        .time-slot { background-color: #e3f2fd; font-weight: bold; }
+                        .participant { background-color: #f0f8ff; margin: 2px; padding: 4px; border-radius: 4px; }
+                    </style>
+                </head>
+                <body>
+                    <h2>🏊‍♂️ جدول دورات السباحة</h2>
+                    <p>تاريخ التصدير: ${new Date().toLocaleDateString('ar-SA')}</p>
+                    <table>
+                        <tr><th>الوقت</th>${days.map(day => `<th>${day}</th>`).join('')}</tr>`;
+            
+            times.forEach(time => {
+                htmlTable += `<tr><td class="time-slot">${time}</td>`;
+                days.forEach(day => {
+                    const participants = schedule[time][day] || [];
+                    htmlTable += `<td>${participants.map(p => `<div class="participant">${p}</div>`).join('')}</td>`;
+                });
+                htmlTable += `</tr>`;
+            });
+            
+            htmlTable += `</table></body></html>`;
+
+            const blob = new Blob([htmlTable], { type: 'application/vnd.ms-excel;charset=utf-8' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.href = url;
+            link.download = `swimming_schedule_${new Date().toISOString().split('T')[0]}.xls`;
+            link.click();
+            URL.revokeObjectURL(url);
+            
+            showNotification('تم تصدير ملف Excel بنجاح! 📊');
+        }
+
+        function exportCSV() {
+            const BOM = '\uFEFF';
+            let csvContent = BOM + "الوقت," + days.join(",") + "\n";
+            
+            times.forEach(time => {
+                let row = `"${time}"`;
+                days.forEach(day => {
+                    const participants = schedule[time][day] || [];
+                    row += `,"${participants.join(' - ')}"`;
+                });
+                csvContent += row + "\n";
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.href = url;
+            link.download = `swimming_schedule_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
+            
+            showNotification('تم تصدير ملف CSV بنجاح! 📋');
+        }
+
+        function printSchedule() {
+            const printWindow = window.open('', '', 'width=1000,height=700');
+            let printContent = `
+                <html dir="rtl">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>جدول دورات السباحة</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        h1 { text-align: center; color: #4facfe; margin-bottom: 20px; }
+                        .info { text-align: center; margin-bottom: 30px; color: #666; }
+                        table { border-collapse: collapse; width: 100%; }
+                        th, td { border: 2px solid #333; padding: 10px; text-align: center; }
+                        th { background-color: #4facfe; color: white; font-weight: bold; }
+                        .time-slot { background-color: #e3f2fd; font-weight: bold; }
+                        .participant { background-color: #f0f8ff; margin: 2px; padding: 5px; border-radius: 4px; display: inline-block; }
+                        @media print { body { margin: 0; } table { font-size: 12px; } }
+                    </style>
+                </head>
+                <body>
+                    <h1>🏊‍♂️ جدول دورات السباحة</h1>
+                    <div class="info">
+                        <p>تاريخ الطباعة: ${new Date().toLocaleDateString('ar-SA')}</p>
+                        <p>إجمالي الطلاب: ${students.length} • إجمالي الحصص: ${times.length * days.length}</p>
+                    </div>
+                    <table>
+                        <tr><th style="width: 100px;">الوقت</th>${days.map(day => `<th>${day}</th>`).join('')}</tr>`;
+            
+            times.forEach(time => {
+                printContent += `<tr><td class="time-slot">${time}</td>`;
+                days.forEach(day => {
+                    const participants = schedule[time][day] || [];
+                    if (participants.length > 0) {
+                        printContent += `<td>${participants.map(p => `<div class="participant">${p}</div>`).join('')}</td>`;
+                    } else {
+                        printContent += `<td style="color: #ccc;">-</td>`;
+                    }
+                });
+                printContent += `</tr>`;
+            });
+            
+            printContent += `</table></body></html>`;
+            
+            printWindow.document.write(printContent);
+            printWindow.document.close();
+            printWindow.print();
+            
+            showNotification('تم فتح نافذة الطباعة! 🖨️');
+        }
+
+        // إعداد المستمعين للأحداث
+        function setupEventListeners() {
+            // البحث في الطلاب
+            document.getElementById('studentSearchInput').addEventListener('input', renderStudentsList);
+            document.getElementById('modalStudentSearch').addEventListener('input', renderStudentSelectionGrid);
+
+            // إضافة طالب بالضغط على Enter
+            document.getElementById('studentNameInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') addStudent();
+            });
+
+            // إغلاق النوافذ بالنقر خارجها
+            window.onclick = function(event) {
+                if (event.target.classList.contains('modal')) {
+                    event.target.style.display = 'none';
+                }
+            };
+
+            // حفظ تلقائي كل دقيقة
+            setInterval(saveDataToStorage, 60000);
+        }
+
+        // تشغيل التطبيق عند تحميل الصفحة
+        document.addEventListener('DOMContentLoaded', initializeApp);
+    </script>
+</body>
+</html>
